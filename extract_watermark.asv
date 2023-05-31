@@ -1,0 +1,4 @@
+function [extwm] = extract_watermark(im, embimg, U1, V1, U2, V2, UW, VW, k1, k2)
+ 
+    [LL1, HL1, LH1, HH1, LL2, HL2, LH2, HH2, LL3, HL3, LH3, HH3] = dwt2_3times(im);
+end
