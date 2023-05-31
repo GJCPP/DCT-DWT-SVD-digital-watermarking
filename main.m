@@ -1,0 +1,1 @@
+embed_watermark(imread('lena.jpg'), imread('watermark.jpg'), 0.01, 0.01);
