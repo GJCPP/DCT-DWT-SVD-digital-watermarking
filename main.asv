@@ -6,11 +6,8 @@ function main
     wm = imread('./image/watermark.jpg');
     im = im2double(imresize(im2gray(im), [N N]));
     wm = im2double(imresize(im2bw(wm), [M M]));
-    %k1 = 0.094216 * ones(1, k_len);
-    %k2 = 6.0247e-06 * ones(1, k_len);
-    history = load('./output/save_20230603_1009/para.mat');
-    k1 = history.v(1:1:k_len);
-    k2 = history.v(k_len+1:1:k_len*2);
+    k1 = 0.05% * ones(1, k_len);
+    k2 = 1e-5 * ones(1, k_len);
 
     obj_func = @(x)target_func(x, N, M, k_len, im, wm);
     out_func = @(optimValues, state)outFcn(optimValues, state, N, M, im, wm);
@@ -22,22 +19,30 @@ function main
         'MaxIterations', 100);%, ...
         %'SelfAdjustmentWeight', 2, ...
         %'SocialAdjustmentWeight', 2);
-   % x = particleswarm(obj_func, 2, 1e-7*ones(1, 2), 1*ones(1, 2), options);
+    %x = particleswarm(obj_func, 2, 1e-7*ones(1, 2), 1*ones(1, 2), options);
     x = particleswarm(obj_func, k_len*2, 1e-7*ones(1, 2*k_len), 1*ones(1, 2*k_len), options);
+    k1 = x(1)
+    k2 = x(2)
+    
 
+    [S1, S2, UW, VW, embimg] = embed_watermark(N, M, im, ...
+                                            wm, k1, k2);
+    imwrite(embimg, './image/embeded_lena.jpg');
+    embimg = imread('./image/embeded_lena.jpg');
+    embimg = im2double(imresize(im2gray(embimg), [N N]));
+
+    [~, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2);
 end
 
 function [stop] = outFcn(optimValues, state, N, M, im, wm)
     stop = false;
-    %k1 = optimValues.bestx(1);
-    %k2 = optimValues.bestx(2);
-    k1 = diag(optimValues.bestx(1:1:64));
-    k2 = diag(optimValues.bestx(65:1:128));
+    k1 = optimValues.bestx(1);
+    k2 = optimValues.bestx(2);
     disp(['Iteration: ', num2str(optimValues.iteration)]);
     disp(['Best Value: ', num2str(optimValues.bestfval)]);
     v = optimValues.bestx;
     save('./output/para.mat', 'v');
-    disp(['Best Para: ' num2str(optimValues.bestx)]);
+    %disp(['Best Para: ' num2str(optimValues.bestx)]);
     disp(['Mean Fval: ', num2str(optimValues.meanfval)]);
     [S1, S2, UW, VW, embimg] = embed_watermark(N, M, im, wm, k1, k2);
     imwrite(embimg, './output/current_emb.jpg');
@@ -48,8 +53,8 @@ end
 function [val] = target_func(x, N, M, k_len, im, wm)
     k1 = diag(x(1:1:k_len));
     k2 = diag(x(k_len+1:1:2*k_len));
-    %k1 = x(1);
-    %k2 = x(2);
+    %k1 = diag(x(1) * ones(1, M/4));
+    %k2 = diag(x(2) * ones(1, M/4));
 
     [S1, S2, UW, VW, embimg] = embed_watermark(N, M, im, ...
                                             wm, k1, k2);
@@ -58,11 +63,11 @@ function [val] = target_func(x, N, M, k_len, im, wm)
     embimg = im2double(imresize(im2gray(embimg), [N N]));
     
     sim = corr2(im, embimg);
-    if sim < 0.999
+    if sim < 0.9997
         val = 100 - sim;
         return
     end
-    sim = 0;
+    sim = -sim;
     sim = sim - run_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2);
     val = sim;
 end
@@ -100,7 +105,7 @@ function [sim] = run_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
         for j = 1:1:2
             [~, ~, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_crop, ...
                 1+256*(i-1):1:256+256*(i-1), 1+256*(j-1):1:256+256*(j-1), []);
-            sim = sim + 10*resnc;
+            sim = sim + 2*resnc;
         end
     end
     for i = 1:1:2
@@ -110,8 +115,6 @@ function [sim] = run_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
             sim = sim + 4*resnc;
         end
     end
-     [~, ~, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_circrop, []);
-     sim = sim + 4 * resnc;
 end
 
 function [res, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
@@ -141,9 +144,6 @@ function [res, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
             sim = sim + resnc;
         end
     end
-    [res1, res2, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_circrop, []);
-    res = [res; res1 res2];
-    sim = sim + resnc;
     %imwrite(res, 'res.jpg');
     %imshow(res);
 end

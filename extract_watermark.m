@@ -20,18 +20,18 @@ function [extwm, nc] = extract_watermark(N, M, im, expwm, S1, S2, UW, VW, k1, k2
     %extwm2 = blockproc(extwm2, [8 8], idct); 
     %extwm1 = igat(extwm1, M);
     %extwm2 = igat(extwm2, M);
-    if corr2(extwm1, expwm) < corr2(1-extwm1, expwm)
+    if similarity(extwm1, expwm) < similarity(1-extwm1, expwm)
         extwm1 = 1-extwm1;
     end
-    if corr2(extwm2, expwm) < corr2(1-extwm2, expwm)
+    if similarity(extwm2, expwm) < similarity(1-extwm2, expwm)
         extwm2 = 1-extwm2;
     end
-    if corr2(expwm, extwm1) < corr2(expwm, extwm2)
+    if similarity(expwm, extwm1) < similarity(expwm, extwm2)
         extwm = extwm2;
     else
         extwm = extwm1;
     end
-    nc = corr2(extwm, expwm); %返回提取出的图片与原水印的相似度
+    nc = similarity(extwm, expwm); %返回提取出的图片与原水印的相似度
 
     %imshow([extwm1, extwm2]);
 end
