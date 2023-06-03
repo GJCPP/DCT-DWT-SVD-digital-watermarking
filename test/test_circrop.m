@@ -1,4 +1,5 @@
 function [res, wm, nc] = test_circrop(N, M, im, expwm, S1, S2, UW, VW, k1, k2)
+    % 尝试攻击，将图像一周抹成黑色
     im = im2double(im2gray(im));
     sz = size(im);
     ci = [fix(sz(1)/2), fix(sz(2)/2), fix(sz(1)/2)];     % center and radius of circle ([c_row, c_col, r])
