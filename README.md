@@ -7,6 +7,7 @@
 
 ## 项目结构
 ![](./pic/project_tree.png)
+
 有若干个重要的文件和文件夹：
 1. main.m 这是主程序的入口，进入后会开始进行PSO迭代，并把参数、结果保存到output文件夹
 2. embed_watermark.m / extract_watermark.m 分别对应了嵌入 / 提取水印的算法；这俩是核心代码，其他代码都是测试、优化用的辅助代码
@@ -73,7 +74,8 @@ Robustness 测试结果尚可，有两处测试没法通过；一处是遮蔽左
 #### 20230602
 加入了PSO优化；PSO指的是Particle Swarm Optimization，一种随机优化算法。
 原来的公式为
-$$ \text{fitness} = -\frac{\text{PSNR} + \sum_{\text{all\ test}}NC }{\text{number of tests}} $$, which does not make any sense...
+$$ \text{fitness} = -\frac{\text{PSNR} + \sum_{\text{all\ test}}NC }{\text{number of tests}} $$
+, which does not make any sense...
 首先是这个除以$n$的正则化毫无必要，因为$n$是个常数；然后峰值信噪比这东西，如果你对原图像一模一样不改，它的值是$\frac{1}{0}=+\infty$，所以后面一项根本不被考虑……
 然后根据个人理解，转而尝试了这样一个目标函数（PSO尝试求其最小值，也就是各NC尽可能大）
 $$ \text{fitness} = \begin{cases}
@@ -91,4 +93,5 @@ $c_i$是一些常系数，用来调整各项的比重；$NC_0$为嵌入图像与
 昨晚的PSO迭代跑完了，效果如图
 ![](./pic/current_emb.jpg)
 ![](./pic/current_res.jpg)
+
 应该说还是相当不错了；唯一非常勉强的一项是只截取保留左下角。
