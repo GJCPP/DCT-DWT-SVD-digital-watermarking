@@ -1,19 +1,28 @@
 function main
-    N = 512; %原图像大小
-    M = 256; %水印图像大小
+    N = 2048; %原图像大小
+    M = 1024; %水印图像大小
     k_len = fix(M/4); % k_1，k_2的长度为 M/4
-    im = imread('./image/lena.jpg');
+    im = imread('./image/2.png');
     wm = imread('./image/watermark.jpg');
-    im = im2double(imresize(im2gray(im), [N N])); %转为灰度图 + 强制把大小转换为N*N + 转为double类型
-    wm = im2double(imresize(im2bw(wm), [M M]));
-    %k1 = 0.05 * ones(1, k_len); 初始的、效果算不错的参数
-    %k2 = 0.001 * ones(1, k_len);
-    history = load('./output/save_20230603_1009/para.mat'); % 读取先前的参数，并恢复到k_1, k_2
-    k1 = history.v(1:1:k_len);
-    k2 = history.v(k_len+1:1:k_len*2);
+    im = im2double(imresize(im, [N N]));
+    wm = im2double(imresize(wm, [M M]));
+    [S1, S2, UW, VW, embimg] = embed_general_image(N, M, im, wm, 0.05, 0.001);
+    imwrite([im embimg], 'emb_res.jpg');
+    res = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, 0.01, 0.001);
+    imwrite(res, 'res.jpg');
+
+    [wm, nc] = extract_general_image(N, M, embimg, wm, S1, S2, UW, VW, 0.01, 0.001);
+    imshow(wm);
+    %im = im2double(imresize(im, [N N])); %转为灰度图 + 强制把大小转换为N*N + 转为double类型
+    %wm = im2double(imresize(im2bw(wm), [M M]));
+    k1 = 0.05 * ones(1, k_len); % 初始的、效果算不错的参数
+    k2 = 0.001 * ones(1, k_len);
+    %history = load('./output/save_20230603_1009/para.mat'); % 读取先前的参数，并恢复到k_1, k_2
+    %k1 = history.v(1:1:k_len);
+    %k2 = history.v(k_len+1:1:k_len*2);
 
     obj_func = @(x)target_func(x, N, M, k_len, im, wm); % 目标函数
-    out_func = @(optimValues, state)outFcn(optimValues, state, N, M, im, wm); % 打印PSO每轮迭代后的情况
+    out_func = @(optimValues, state)outFcn(optimValues, state, N, M, k_len, im, wm); % 打印PSO每轮迭代后的情况
     options = optimoptions('particleswarm', ...
         'MaxIterations', 100, ...          % 最多迭代100轮
         'OutputFcn', out_func, ...         % 每轮迭代后的输出函数，会保存当前最优解
@@ -27,12 +36,12 @@ function main
         % 执行优化
 end
 
-function [stop] = outFcn(optimValues, state, N, M, im, wm)
+function [stop] = outFcn(optimValues, state, N, M, k_len, im, wm)
     % 打印一轮迭代后的信息
 
     stop = false; % 迭代默认不停止
-    k1 = diag(optimValues.bestx(1:1:64));   % 64应该是k_len的值；懒，就直接写了
-    k2 = diag(optimValues.bestx(65:1:128)); % 取出k_1和k_2的对角阵
+    k1 = diag(optimValues.bestx(1:1:k_len));   % 64应该是k_len的值；懒，就直接写了
+    k2 = diag(optimValues.bestx(k_len+1:1:128)); % 取出k_1和k_2的对角阵
     disp(['Iteration: ', num2str(optimValues.iteration)]);
         % 完成迭代轮数
     disp(['Best Value: ', num2str(optimValues.bestfval)]);
@@ -43,7 +52,7 @@ function [stop] = outFcn(optimValues, state, N, M, im, wm)
         % 目前最优的变量取值
     disp(['Mean Fval: ', num2str(optimValues.meanfval)]);
         % 粒子的平均目标函数值；这一值应当会逐渐下降
-    [S1, S2, UW, VW, embimg] = embed_watermark(N, M, im, wm, k1, k2);
+    [S1, S2, UW, VW, embimg] = embed_general_image(N, M, im, wm, k1, k2);
     imwrite(embimg, './output/current_emb.jpg');
         % 使用当前最优参数嵌入图像，并保存到指定文件（作为一个preview）
     [res, ~] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2);
@@ -57,17 +66,19 @@ function [val] = target_func(x, N, M, k_len, im, wm)
     k2 = diag(x(k_len+1:1:2*k_len));
         % 将向量恢复为两个对角矩阵
 
-    [S1, S2, UW, VW, embimg] = embed_watermark(N, M, im, ...
+    [S1, S2, UW, VW, embimg] = embed_general_image(N, M, im, ...
                                             wm, k1, k2);
     imwrite(embimg, './image/embeded_lena.jpg');
     embimg = imread('./image/embeded_lena.jpg');
-    embimg = im2double(imresize(im2gray(embimg), [N N]));
+    embimg = im2double(imresize(embimg, [N N]));
         % 使用指定参数嵌入图像，并保存到指定文件后读回
         % 写入后读回是为了模拟保存为jpg带来的损失
         % 不知道有没有不真的写入文件的模拟方法，总之现在这个works
     
-    sim = corr2(im, embimg);
-    if sim < 0.999
+    sim = (corr2(im(:,:,1), embimg(:,:,1)) + ...
+     corr2(im(:,:,2), embimg(:,:,2)) + ...
+      corr2(im(:,:,3), embimg(:,:,3)));
+    if sim < 2.9
         val = 100 - sim;
         % 要求嵌入水印后的图像与原图像的相关度大于0.999
         % 否则只以相关度作为优化目标
@@ -94,8 +105,9 @@ function [im, wm, sim] = run_test(N, M, embimg, expwm, S1, S2, UW, VW, k1, k2, t
     if fix((N-size(im, 1)) / 2) > 0
         im = padarray(im, [fix((N-size(im, 1)) / 2) fix((N-size(im, 1)) / 2)], 0, 'both');
     end
-    im = imresize(im, [256 256]);
-    wm = imresize(wm, [256 256]);
+    im = imresize(im, [512 512]);
+    wm = imresize(wm, [512 512]);
+    wm = repmat(255*wm, [1 1 3]);
         % 测试函数未必返回适合显示的图像
         % 此处对图像进行256像素对齐；这一数值可以与main中的NM无关，因为只是记录结果的需要
 end
@@ -154,8 +166,9 @@ function [res, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
     end
     for i = 1:1:2
         for j = 1:1:2
+            step = fix(N / 2);
             [res1, res2, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_mask, ...
-                1+256*(i-1):1:256+256*(i-1), 1+256*(j-1):1:256+256*(j-1), []);
+                1+step*(i-1):1:step+step*(i-1), 1+step*(j-1):1:step+step*(j-1), []);
             res = [res; res1 res2];
             sim = sim + resnc;
         end
