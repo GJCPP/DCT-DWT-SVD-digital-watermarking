@@ -1,32 +1,28 @@
 function main
-    N = 2048; %原图像大小
-    M = 1024; %水印图像大小
+    N = 512; %原图像大小
+    M = 256; %水印图像大小
     k_len = fix(M/4); % k_1，k_2的长度为 M/4
-    im = imread('./image/2.png');
-    wm = imread('./image/watermark.jpg');
-    im = im2double(imresize(im, [N N]));
-    wm = im2double(imresize(wm, [M M]));
-    [S1, S2, UW, VW, embimg] = embed_general_image(N, M, im, wm, 0.05, 0.001);
-    imwrite([im embimg], 'emb_res.jpg');
-    res = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, 0.01, 0.001);
-    imwrite(res, 'res.jpg');
+    history = load('./output/para.mat'); % 读取先前的参数，并恢复到k_1, k_2
+    k1 = history.v(1:1:k_len);
+    k2 = history.v(k_len+1:1:k_len*2);
+    %k1 = 0.05 * ones(1, k_len); % 初始的、效果算不错的参数
+    %k2 = 0.001 * ones(1, k_len);
 
-    [wm, nc] = extract_general_image(N, M, embimg, wm, S1, S2, UW, VW, 0.01, 0.001);
-    imshow(wm);
+
+    im = imread('./测试素材/3.jpg');
+    wm = imread('./image/watermark.jpg');
+    im = im2double(im);
+    wm = im2double(wm);
+
     %im = im2double(imresize(im, [N N])); %转为灰度图 + 强制把大小转换为N*N + 转为double类型
     %wm = im2double(imresize(im2bw(wm), [M M]));
-    k1 = 0.05 * ones(1, k_len); % 初始的、效果算不错的参数
-    k2 = 0.001 * ones(1, k_len);
-    %history = load('./output/save_20230603_1009/para.mat'); % 读取先前的参数，并恢复到k_1, k_2
-    %k1 = history.v(1:1:k_len);
-    %k2 = history.v(k_len+1:1:k_len*2);
 
     obj_func = @(x)target_func(x, N, M, k_len, im, wm); % 目标函数
     out_func = @(optimValues, state)outFcn(optimValues, state, N, M, k_len, im, wm); % 打印PSO每轮迭代后的情况
     options = optimoptions('particleswarm', ...
-        'MaxIterations', 100, ...          % 最多迭代100轮
+        'MaxIterations', 1, ...          % 最多迭代100轮
         'OutputFcn', out_func, ...         % 每轮迭代后的输出函数，会保存当前最优解
-        'SwarmSize', 50, ...               % 粒子数为50
+        'SwarmSize', 5, ...               % 粒子数为50
         'InitialSwarmMatrix', [k1 k2]);    % 初始时将一个粒子放置在预设位置
     x = particleswarm(obj_func, ...
         k_len*2, ...                       % 变量为长度为 k_len*2 的向量
@@ -34,6 +30,7 @@ function main
         1*ones(1, 2*k_len), ...            % 变量每个位置的最大取值为1
         options);
         % 执行优化
+    save_result(N, M, im, wm, k1, k2);
 end
 
 function [stop] = outFcn(optimValues, state, N, M, k_len, im, wm)
@@ -74,11 +71,9 @@ function [val] = target_func(x, N, M, k_len, im, wm)
         % 使用指定参数嵌入图像，并保存到指定文件后读回
         % 写入后读回是为了模拟保存为jpg带来的损失
         % 不知道有没有不真的写入文件的模拟方法，总之现在这个works
-    
-    sim = (corr2(im(:,:,1), embimg(:,:,1)) + ...
-     corr2(im(:,:,2), embimg(:,:,2)) + ...
-      corr2(im(:,:,3), embimg(:,:,3)));
-    if sim < 2.9
+
+    sim = psnr(im, embimg);
+    if sim < 38
         val = 100 - sim;
         % 要求嵌入水印后的图像与原图像的相关度大于0.999
         % 否则只以相关度作为优化目标
@@ -124,22 +119,24 @@ function [sim] = run_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
     end
     for i = 1:1:2
         for j = 1:1:2
+            step = fix(N/2);
             [~, ~, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_crop, ...
-                1+256*(i-1):1:256+256*(i-1), 1+256*(j-1):1:256+256*(j-1), []);
-            sim = sim + 10*resnc;
+                1+step*(i-1):1:step+step*(i-1), 1+step*(j-1):1:step+step*(j-1), []);
+            sim = sim + resnc;
             % 执行crop测试，将含水印图像剪切到原来的1/4大小
         end
     end
     for i = 1:1:2
         for j = 1:1:2
+            step = fix(N/2);
             [~, ~, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_mask, ...
-                1+256*(i-1):1:256+256*(i-1), 1+256*(j-1):1:256+256*(j-1), []);
-            sim = sim + 4*resnc;
+                1+step*(i-1):1:step+step*(i-1), 1+step*(j-1):1:step+step*(j-1), []);
+            sim = sim + resnc;
             % 执行mask测试，将含水印图像的1/4用黑色取代
         end
     end
      [~, ~, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_circrop, []);
-     sim = sim + 4 * resnc;
+     sim = sim + resnc;
     % 执行mask测试，将含水印图像的周围一圈用黑色取代
 end
 
@@ -158,8 +155,9 @@ function [res, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
     end
     for i = 1:1:2
         for j = 1:1:2
+            step = fix(N / 2);
             [res1, res2, resnc] = run_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2, @test_crop, ...
-                1+256*(i-1):1:256+256*(i-1), 1+256*(j-1):1:256+256*(j-1), []);
+                1+step*(i-1):1:step+step*(i-1), 1+step*(j-1):1:step+step*(j-1), []);
             res = [res; res1 res2];
             sim = sim + resnc;
         end
@@ -178,3 +176,14 @@ function [res, sim] = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, k1, k2)
     sim = sim + resnc;
 end
 
+function save_result(N, M, im, wm, k1, k2)
+    [S1, S2, UW, VW, embimg] = embed_general_image(N, M, im, wm, diag(k1), diag(k2));
+    imwrite(embimg, 'image/embeded_lena.jpg');
+    embimg = imread('image/embeded_lena.jpg');
+    embimg = im2double(embimg);
+    [wm, nc] = extract_general_image(N, M, embimg, wm, S1, S2, UW, VW, diag(k1), diag(k2));
+    imwrite([im embimg], 'emb_res.jpg');
+    imshow([im embimg]);
+    res = show_all_test(N, M, embimg, wm, S1, S2, UW, VW, diag(k1), diag(k2));
+    imwrite(res, 'res.jpg');
+end
